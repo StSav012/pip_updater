@@ -1,0 +1,42 @@
+[build-system]
+requires = ['setuptools>=45', 'setuptools_scm[toml]>=6.2']
+
+[project]
+name = 'pip_updater'
+authors = [
+    {name = 'StSav012', email = 'stsav012@gmail.com'},
+]
+description = 'Utils for pip: update all, list orphant packages'
+readme = 'README.md'
+license = {text = 'MIT'}
+requires-python = '>=3.8'
+classifiers = [
+    'Development Status :: 4 - Beta',
+    'Environment :: Console',
+    'Intended Audience :: Developers',
+    'License :: OSI Approved :: MIT License',
+    'Natural Language :: English',
+    'Operating System :: OS Independent',
+    'Programming Language :: Python :: 3 :: Only',
+    'Topic :: Software Development :: Libraries :: Python Modules',
+    'Typing :: Typed',
+]
+dependencies = []
+dynamic = [
+    'version',
+]
+
+[project.scripts]
+update-packages = 'pip_updater:update_packages'
+orphaned-packages = 'pip_updater:print_orphaned_packages'
+
+[project.urls]
+'Source Code' = 'https://github.com/StSav012/pip_updater'
+'Bug Tracker' = 'https://github.com/StSav012/pip_updater/issues'
+
+[tool.setuptools_scm]
+local_scheme = 'no-local-version'
+write_to = 'pip_updater/_version.py'
+
+[tool.setuptools.dynamic]
+version = {attr = 'pip_updater._version.__version__'}
