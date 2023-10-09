@@ -226,7 +226,7 @@ def list_packages_tree() -> Graph:
 
         package_path: Path
         for package_path in site_path.glob('*.dist-info'):
-            metadata: list[str] = (package_path / 'METADATA').read_text().splitlines()
+            metadata: list[str] = (package_path / 'METADATA').read_text(encoding='utf-8').splitlines()
             package_name: str = find_line(metadata, 'Name: ')
             for line in find_lines(metadata, 'Requires-Dist: '):
                 if ';' in line:
