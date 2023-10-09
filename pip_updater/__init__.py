@@ -108,6 +108,9 @@ class Graph:
 
 
 def parse_table(table_text: str) -> list[dict[str, str]]:
+    if not table_text:
+        return []
+
     text_lines: list[str] = table_text.splitlines()
     rules: list[str] = [line for line in text_lines if set(line) == set('- ')]
     if len(rules) != 1:
