@@ -173,6 +173,10 @@ def update_packages() -> None:
             sys.stderr.write(err)
             return
         outdated_packages: list[str] = [item['Package'] for item in parse_table(p.stdout.read())]
+    if not outdated_packages:
+        print('No packages to update')
+        return
+
     for pp in priority_packages:
         if pp in outdated_packages:
             print(f'Updating {pp}')
