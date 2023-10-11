@@ -215,7 +215,7 @@ def list_packages() -> Iterator[tuple[str, str]]:
 def list_packages_tree() -> Graph:
     site_paths: set[Path] = set()
     graph: Graph = Graph()
-    pattern: re.Pattern[str] = re.compile(r'^(?P<package>[\w\-]*)\s*(\[(?P<extra>[^]]+)])?')
+    pattern: re.Pattern[str] = re.compile(r'^(?P<package>[\w\-]*)[^;]*(;\s*\[(?P<extra>[^]]+)])?$')
     extras: dict[str, set[str]] = {}
     packages: set[str] = set()
 
@@ -260,11 +260,11 @@ def list_packages_tree() -> Graph:
                             ),
                     ):
                         continue
-                match: re.Match[str] | None = pattern.search(line)
+                match: re.Match[str] | None = pattern.match(line)
                 if match is not None:
                     graph.add_node(package_name, package := match.group('package'))
                     if (extra := match.group('extra')) is not None:
-                        extras.get(package, set()).update(set(pattern.search(e.strip()).group()
+                        extras.get(package, set()).update(set(pattern.match(e.strip()).group()
                                                               for e in extra.strip(',')))
 
     for package_name in packages:
