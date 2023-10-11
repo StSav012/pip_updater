@@ -217,6 +217,7 @@ def list_packages_tree() -> Graph:
     graph: Graph = Graph()
     pattern: re.Pattern[str] = re.compile(r'^(?P<package>[\w\-]*)\s*(\[(?P<extra>[^]]+)])?')
     extras: dict[str, set[str]] = {}
+    packages: set[str] = set()
 
     def format_full_version(info) -> str:
         version: str = f'{info.major}.{info.minor}.{info.micro}'
@@ -235,6 +236,7 @@ def list_packages_tree() -> Graph:
         for package_path in site_path.glob('*.dist-info'):
             metadata: list[str] = (package_path / 'METADATA').read_text(encoding='utf-8').splitlines()
             package_name: str = find_line(metadata, 'Name: ')
+            packages.add(package_name)
             for line in find_lines(metadata, 'Requires-Dist: '):
                 if ';' in line:
                     constrains: str
@@ -265,6 +267,8 @@ def list_packages_tree() -> Graph:
                         extras.get(package, set()).update(set(pattern.search(e.strip()).group()
                                                               for e in extra.strip(',')))
 
+    for package_name in packages:
+        if not graph.find(package_name):
             graph.add_node(package_name)
     return graph
 
