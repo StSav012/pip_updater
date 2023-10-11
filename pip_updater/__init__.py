@@ -65,7 +65,16 @@ class Graph:
             else:
                 parent = found_parent
         if value is not None:
-            node: Graph.Node = Graph.Node(value)
+            found_value: Graph.Node | None = self.find(value)
+            node: Graph.Node
+            if found_value is None:
+                node = Graph.Node(value)
+            else:
+                if found_value in self.nodes:
+                    self.nodes.remove(found_value)
+                for parent in found_value.parents:
+                    parent.children.remove(found_value)
+                node = found_value
             node.parents.add(parent)
             parent.children.add(node)
 
