@@ -19,7 +19,12 @@ class Graph:
             self.parents: set[Graph.Node] = set()
 
         def __repr__(self) -> str:
-            return f'{self.value!r}: ' + '{' + ', '.join(repr(child) for child in self.children) + '}'
+            return (
+                f"{self.value!r}: "
+                + "{"
+                + ", ".join(repr(child) for child in self.children)
+                + "}"
+            )
 
         def __str__(self) -> str:
             return self.value
@@ -39,7 +44,7 @@ class Graph:
             for node in self.children:
                 if node == item:
                     return node
-            raise IndexError(f'Item {item} not found')
+            raise IndexError(f"Item {item} not found")
 
     def __init__(self) -> None:
         self.nodes: set[Graph.Node] = set()
@@ -79,14 +84,20 @@ class Graph:
             parent.children.add(node)
 
     def __repr__(self) -> str:
-        node: Graph.Node
-        return self.__class__.__name__ + '(\n' + ',\n'.join(repr(node) for node in self.nodes) + ')'
+        return (
+            self.__class__.__name__
+            + "(\n"
+            + ",\n".join(repr(node) for node in self.nodes)
+            + ")"
+        )
 
     def __invert__(self) -> Graph:
         graph: Graph = Graph()
 
         def recursive_children(child_node: Graph.Node) -> None:
-            def recursive_parents(parent_node: Graph.Node, parents: set[Graph.Node]) -> None:
+            def recursive_parents(
+                parent_node: Graph.Node, parents: set[Graph.Node]
+            ) -> None:
                 if not parents:
                     return
                 parent: Graph.Node
@@ -99,7 +110,9 @@ class Graph:
 
             if not child_node.children:
                 new_node: Graph.Node = Graph.Node(child_node.value)
-                new_node.children = set(Graph.Node(parent.value) for parent in child_node.parents)
+                new_node.children = set(
+                    Graph.Node(parent.value) for parent in child_node.parents
+                )
                 recursive_parents(child_node, child_node.parents)
                 graph.nodes.add(new_node)
             else:
@@ -121,29 +134,29 @@ def parse_table(table_text: str) -> list[dict[str, str]]:
         return []
 
     text_lines: list[str] = table_text.splitlines()
-    rules: list[str] = [line for line in text_lines if set(line) == set('- ')]
+    rules: list[str] = [line for line in text_lines if set(line) == set("- ")]
     if len(rules) != 1:
-        raise RuntimeError('Failed to parse the table')
+        raise RuntimeError("Failed to parse the table")
     if text_lines.index(rules[0]) != 1:
-        raise RuntimeError('Failed to parse the table')
+        raise RuntimeError("Failed to parse the table")
     cols: list[int] = [len(rule) for rule in rules[0].split()]
     titles: list[str] = []
     offset: int = 0
     for col in cols:
-        titles.append(text_lines[0][offset:(offset + col)].strip())
+        titles.append(text_lines[0][offset : (offset + col)].strip())
         offset += col + 1
     data: list[dict[str, str]] = []
     for line_no in range(2, len(text_lines)):
         data.append(dict())
         offset = 0
         for col, title in zip(cols, titles):
-            data[-1][title] = text_lines[line_no][offset:(offset + col)].strip()
+            data[-1][title] = text_lines[line_no][offset : (offset + col)].strip()
             offset += col + 1
     return data
 
 
 def find_line(lines: list[str], prefix: str, remove_prefix: bool = True) -> str:
-    line: str = ''
+    line: str = ""
     for line in lines:
         if line.startswith(prefix):
             if remove_prefix:
@@ -152,7 +165,9 @@ def find_line(lines: list[str], prefix: str, remove_prefix: bool = True) -> str:
     return line
 
 
-def find_lines(lines: list[str], prefix: str, remove_prefix: bool = True) -> Iterator[str]:
+def find_lines(
+    lines: list[str], prefix: str, remove_prefix: bool = True
+) -> Iterator[str]:
     line: str
     for line in lines:
         if line.startswith(prefix):
@@ -164,8 +179,12 @@ def find_lines(lines: list[str], prefix: str, remove_prefix: bool = True) -> Ite
 
 def update_package(package_name: str) -> tuple[str, str, int]:
     p: Popen
-    with Popen(args=[sys.executable, '-m', 'pip', 'install', '-U', package_name],
-               stdout=PIPE, stderr=PIPE, text=True) as p:
+    with Popen(
+        args=[sys.executable, "-m", "pip", "install", "-U", package_name],
+        stdout=PIPE,
+        stderr=PIPE,
+        text=True,
+    ) as p:
         err: str = p.stderr.read()
         if err:
             sys.stderr.write(err)
@@ -173,22 +192,29 @@ def update_package(package_name: str) -> tuple[str, str, int]:
 
 
 def update_packages() -> None:
-    priority_packages: list[str] = ['pip', 'setuptools', 'wheel']
+    priority_packages: list[str] = ["pip", "setuptools", "wheel"]
     err: str
     p: Popen
-    with Popen(args=[sys.executable, '-m', 'pip', 'list', '--outdated'], stdout=PIPE, stderr=PIPE, text=True) as p:
+    with Popen(
+        args=[sys.executable, "-m", "pip", "list", "--outdated"],
+        stdout=PIPE,
+        stderr=PIPE,
+        text=True,
+    ) as p:
         err = p.stderr.read()
         if p.returncode:
             sys.stderr.write(err)
             return
-        outdated_packages: list[str] = [item['Package'] for item in parse_table(p.stdout.read())]
+        outdated_packages: list[str] = [
+            item["Package"] for item in parse_table(p.stdout.read())
+        ]
     if not outdated_packages:
-        print('No packages to update')
+        print("No packages to update")
         return
 
     for pp in priority_packages:
         if pp in outdated_packages:
-            print(f'Updating {pp}')
+            print(f"Updating {pp}")
             out, err, ret = update_package(pp)
             print(out)
             if ret:
@@ -196,7 +222,7 @@ def update_packages() -> None:
                 return
             outdated_packages.remove(pp)
     for op in outdated_packages:
-        print(f'Updating {op}')
+        print(f"Updating {op}")
         out, err, ret = update_package(op)
         print(out)
         if ret:
@@ -213,25 +239,27 @@ def list_packages() -> Iterator[tuple[str, str]]:
         site_paths.add(site_path)
 
         package_path: Path
-        for package_path in site_path.glob('*.dist-info'):
-            package_name: str = package_path.name.removesuffix('.dist-info')
-            if '-' in package_name:
-                yield tuple(package_name.split('-', maxsplit=1))
+        for package_path in site_path.glob("*.dist-info"):
+            package_name: str = package_path.name.removesuffix(".dist-info")
+            if "-" in package_name:
+                yield tuple(package_name.split("-", maxsplit=1))
             else:
-                yield package_name, ''
+                yield package_name, ""
 
 
 def list_packages_tree() -> Graph:
     site_paths: set[Path] = set()
     graph: Graph = Graph()
-    pattern: re.Pattern[str] = re.compile(r'^(?P<package>[\w\-]*)[^;]*(;\s*\[(?P<extra>[^]]+)])?$')
+    pattern: re.Pattern[str] = re.compile(
+        r"^(?P<package>[\w\-]*)[^;]*(;\s*\[(?P<extra>[^]]+)])?$"
+    )
     extras: dict[str, set[str]] = {}
     packages: set[str] = set()
 
     def format_full_version(info) -> str:
-        version: str = f'{info.major}.{info.minor}.{info.micro}'
+        version: str = f"{info.major}.{info.minor}.{info.micro}"
         kind: str = info.releaselevel
-        if kind != 'final':
+        if kind != "final":
             version += kind[0] + str(info.serial)
         return version
 
@@ -242,39 +270,50 @@ def list_packages_tree() -> Graph:
         site_paths.add(site_path)
 
         package_path: Path
-        for package_path in site_path.glob('*.dist-info'):
-            metadata: list[str] = (package_path / 'METADATA').read_text(encoding='utf-8').splitlines()
-            package_name: str = find_line(metadata, 'Name: ')
+        for package_path in site_path.glob("*.dist-info"):
+            metadata: list[str] = (
+                (package_path / "METADATA").read_text(encoding="utf-8").splitlines()
+            )
+            package_name: str = find_line(metadata, "Name: ")
             packages.add(package_name)
-            for line in find_lines(metadata, 'Requires-Dist: '):
-                if ';' in line:
+            for line in find_lines(metadata, "Requires-Dist: "):
+                if ";" in line:
                     constrains: str
-                    line, constrains = line.split(';', maxsplit=1)
+                    line, constrains = line.split(";", maxsplit=1)
                     if not eval(
-                            constrains.strip(),
-                            dict(
-                                os_name=os.name,
-                                sys_platform=sys.platform,
-                                platform_machine=platform.machine(),
-                                platform_python_implementation=platform.python_implementation(),
-                                platform_release=platform.release(),
-                                platform_system=platform.system(),
-                                platform_version=platform.version(),
-                                python_version='.'.join(platform.python_version_tuple()[:2]),
-                                python_full_version=platform.python_version(),
-                                implementation_name=sys.implementation.name,
-                                implementation_version=(format_full_version(sys.implementation.version)
-                                if hasattr(sys, 'implementation') else '0'),
-                                extra=extras.get(package_name, ''),
+                        constrains.strip(),
+                        dict(
+                            os_name=os.name,
+                            sys_platform=sys.platform,
+                            platform_machine=platform.machine(),
+                            platform_python_implementation=platform.python_implementation(),
+                            platform_release=platform.release(),
+                            platform_system=platform.system(),
+                            platform_version=platform.version(),
+                            python_version=".".join(
+                                platform.python_version_tuple()[:2]
                             ),
+                            python_full_version=platform.python_version(),
+                            implementation_name=sys.implementation.name,
+                            implementation_version=(
+                                format_full_version(sys.implementation.version)
+                                if hasattr(sys, "implementation")
+                                else "0"
+                            ),
+                            extra=extras.get(package_name, ""),
+                        ),
                     ):
                         continue
                 match: re.Match[str] | None = pattern.match(line)
                 if match is not None:
-                    graph.add_node(package_name, package := match.group('package'))
-                    if (extra := match.group('extra')) is not None:
-                        extras.get(package, set()).update(set(pattern.match(e.strip()).group()
-                                                              for e in extra.strip(',')))
+                    graph.add_node(package_name, package := match.group("package"))
+                    if (extra := match.group("extra")) is not None:
+                        extras.get(package, set()).update(
+                            set(
+                                pattern.match(e.strip()).group()
+                                for e in extra.strip(",")
+                            )
+                        )
 
     for package_name in packages:
         if not graph.find(package_name):
@@ -283,15 +322,15 @@ def list_packages_tree() -> Graph:
 
 
 def orphaned_packages() -> frozenset[str]:
-    return list_packages_tree().top() - frozenset(('pip', 'setuptools'))
+    return list_packages_tree().top() - frozenset(("pip", "setuptools"))
 
 
 def print_orphaned_packages() -> None:
     _orphaned_packages: frozenset[str] = orphaned_packages()
     if _orphaned_packages:
-        print('The following packages are not required by other packages:')
+        print("The following packages are not required by other packages:")
         package_name: str
         for package_name in _orphaned_packages:
-            print(f'    • {package_name}')
+            print(f"    • {package_name}")
     else:
-        print('All packages are required.')
+        print("All packages are required.")
