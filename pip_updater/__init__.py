@@ -271,6 +271,8 @@ def list_packages_tree() -> Graph:
 
         package_path: Path
         for package_path in site_path.glob("*.dist-info"):
+            if package_path.name.startswith("~"):
+                continue
             metadata: list[str] = (
                 (package_path / "METADATA").read_text(encoding="utf-8").splitlines()
             )
