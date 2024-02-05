@@ -192,24 +192,28 @@ def is_python_version_equal(version: str) -> bool:
 def is_python_version_less(version: str) -> bool:
     for gv, pv in zip(version.split("."), sys.version_info):
         if gv == "*":
-            return False
-        if gv.isdecimal() and isinstance(pv, int) and int(gv) > pv:
-            return True
-        # FIXME: that's not how it should be done
-        if not gv.isdecimal() and gv > str(pv):
-            return True
+            break
+        if gv.isdecimal() and isinstance(pv, int):
+            if int(gv) != pv:
+                return int(gv) > pv
+        else:
+            # FIXME: that's not how it should be done
+            if gv != str(pv):
+                return gv > str(pv)
     return False
 
 
 def is_python_version_greater(version: str) -> bool:
     for gv, pv in zip(version.split("."), sys.version_info):
         if gv == "*":
-            return False
-        if gv.isdecimal() and isinstance(pv, int) and int(gv) < pv:
-            return True
-        # FIXME: that's not how it should be done
-        if not gv.isdecimal() and gv < str(pv):
-            return True
+            break
+        if gv.isdecimal() and isinstance(pv, int):
+            if int(gv) != pv:
+                return int(gv) < pv
+        else:
+            # FIXME: that's not how it should be done
+            if gv != str(pv):
+                return gv < str(pv)
     return False
 
 
