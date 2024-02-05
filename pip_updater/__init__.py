@@ -240,11 +240,25 @@ def list_packages() -> Iterator[tuple[str, str]]:
 
         package_path: Path
         for package_path in site_path.glob("*.dist-info"):
-            package_name: str = package_path.name.removesuffix(".dist-info")
-            if "-" in package_name:
-                yield tuple(package_name.split("-", maxsplit=1))
-            else:
-                yield package_name, ""
+            if package_path.name.startswith("~"):
+                continue
+            metadata: list[str] = (
+                (package_path / "METADATA").read_text(encoding="utf-8").splitlines()
+            )
+            package_name: str = find_line(metadata, "Name: ")
+            package_version: str = find_line(metadata, "Version: ")
+            if (package_path / "direct_url.json").exists():
+                print(f"{package_name} installed directly from a URL", file=sys.stderr)
+                continue
+            if not (installer_file := (package_path / "INSTALLER")).exists():
+                print(f"Unknown installer for {package_name}", file=sys.stderr)
+                continue
+            elif (
+                installer := installer_file.read_text(encoding="utf-8").strip()
+            ) != "pip":
+                print(f"{package_name} installed with {installer}", file=sys.stderr)
+                continue
+            yield package_name, package_version
 
 
 def list_packages_tree() -> Graph:
