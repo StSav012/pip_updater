@@ -288,6 +288,7 @@ class PackageFileParser(HTMLParser):
             )
             silently_invalid_suffixes: tuple[str, ...] = (
                 ".exe",
+                ".msi",
                 ".egg",
                 ".src.rpm",
             )
