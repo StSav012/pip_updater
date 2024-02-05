@@ -6,9 +6,14 @@ import platform
 import re
 import site
 import sys
+from collections import deque
+from html.parser import HTMLParser
+from http.client import HTTPResponse
 from pathlib import Path
 from subprocess import PIPE, Popen
-from typing import Iterable, Iterator
+from typing import Iterable, Iterator, Sequence
+from urllib.error import HTTPError
+from urllib.request import urlopen
 
 
 class Graph:
@@ -177,6 +182,150 @@ def find_lines(
                 yield line
 
 
+def is_python_version_equal(version: str) -> bool:
+    return all(
+        gv == "*" or gv == str(pv)
+        for gv, pv in zip(version.split("."), sys.version_info)
+    )
+
+
+def is_python_version_less(version: str) -> bool:
+    for gv, pv in zip(version.split("."), sys.version_info):
+        if gv == "*":
+            return False
+        if gv.isdecimal() and isinstance(pv, int) and int(gv) > pv:
+            return True
+        # FIXME: that's not how it should be done
+        if not gv.isdecimal() and gv > str(pv):
+            return True
+    return False
+
+
+def is_python_version_greater(version: str) -> bool:
+    for gv, pv in zip(version.split("."), sys.version_info):
+        if gv == "*":
+            return False
+        if gv.isdecimal() and isinstance(pv, int) and int(gv) < pv:
+            return True
+        # FIXME: that's not how it should be done
+        if not gv.isdecimal() and gv < str(pv):
+            return True
+    return False
+
+
+class PackageFileParser(HTMLParser):
+    def __init__(self, package_name: str) -> None:
+        super().__init__()
+        self._package_name: str = package_name.replace("-", "_")
+        self._path: deque[str] = deque()
+        self._versions: deque[str] = deque()
+        self._requires_python: str = ""
+
+    def _is_python_version_valid(self) -> bool:
+        for version_condition in self._requires_python.split(","):
+            version_condition = version_condition.strip()
+            if version_condition.startswith(">="):
+                if is_python_version_less(version_condition[2:]):
+                    return False
+            elif version_condition.startswith(">"):
+                if is_python_version_less(
+                    version_condition[1:]
+                ) or is_python_version_equal(version_condition[1:]):
+                    return False
+            if version_condition.startswith("<="):
+                if is_python_version_greater(version_condition[2:]):
+                    return False
+            elif version_condition.startswith("<"):
+                if is_python_version_greater(
+                    version_condition[1:]
+                ) or is_python_version_equal(version_condition[1:]):
+                    return False
+            if version_condition.startswith("!="):
+                if is_python_version_equal(version_condition[2:]):
+                    return False
+            if version_condition.startswith("=="):
+                if not is_python_version_equal(version_condition[2:]):
+                    return False
+            if version_condition.startswith("~="):
+                pass  # do not know what to do
+        return True
+
+    @staticmethod
+    def _is_arch_valid(arch: str) -> bool:
+        if arch == "any":
+            return True
+        if sys.platform.startswith("win"):
+            if platform.machine().endswith("64"):
+                return f"win_{platform.machine()}" in arch
+            else:
+                return sys.platform in arch
+        elif sys.platform.startswith("darwin"):
+            if platform.machine().endswith("64"):
+                return "macosx" in arch and platform.machine() in arch
+            else:
+                return "macosx" in arch and ("intel" in arch or "universal" in arch)
+        elif sys.platform.startswith("linux"):
+            return sys.platform in arch and platform.machine() in arch
+        # if nothing matches, the arch might still be valid
+        return True
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        self._path.append(tag)
+        self._requires_python = dict(attrs).get("data-requires-python", "")
+
+    def handle_endtag(self, tag: str) -> None:
+        while self._path and self._path.pop() != tag:
+            pass
+
+    def handle_data(self, data: str) -> None:
+        if self._path == deque(["html", "body", "a"]):
+            if not self._is_python_version_valid():
+                return
+            valid_suffixes: tuple[str, ...] = (
+                ".whl",
+                ".tar.gz",
+                ".zip",
+            )
+            silently_invalid_suffixes: tuple[str, ...] = (
+                ".exe",
+                ".egg",
+                ".src.rpm",
+            )
+            if data.endswith(valid_suffixes):
+                for suffix in valid_suffixes:
+                    data = data.removesuffix(suffix)
+            elif data.endswith(silently_invalid_suffixes):
+                return
+            else:
+                print(f"Odd filename found: {data!r}", file=sys.stderr)
+                return
+            parts: Sequence[str] = data.removeprefix(f"{self._package_name}-").split(
+                "-"
+            )
+            if parts:
+                version, *parts = parts
+                if not parts or self._is_arch_valid(parts[-1]):
+                    self._versions.append(version)
+
+    @property
+    def versions(self) -> deque[str]:
+        return self._versions
+
+
+def read_package_versions(package_name: str) -> Sequence[str]:
+    r: HTTPResponse
+    parser: PackageFileParser = PackageFileParser(package_name)
+    try:
+        with urlopen(f"https://pypi.org/simple/{package_name.replace('_', '-')}/") as r:
+            parser.feed(r.read().decode())
+    except HTTPError as ex:
+        if ex.code == 404:
+            print(f"{package_name} not found", file=sys.stderr)
+        else:
+            print(f"{package_name}: {ex!s}", file=sys.stderr)
+    return parser.versions
+
+
 def update_package(package_name: str) -> tuple[str, str, int]:
     p: Popen
     with Popen(
@@ -193,21 +342,15 @@ def update_package(package_name: str) -> tuple[str, str, int]:
 
 def update_packages() -> None:
     priority_packages: list[str] = ["pip", "setuptools", "wheel"]
-    err: str
-    p: Popen
-    with Popen(
-        args=[sys.executable, "-m", "pip", "list", "--outdated"],
-        stdout=PIPE,
-        stderr=PIPE,
-        text=True,
-    ) as p:
-        err = p.stderr.read()
-        if p.returncode:
-            sys.stderr.write(err)
-            return
-        outdated_packages: list[str] = [
-            item["Package"] for item in parse_table(p.stdout.read())
-        ]
+    outdated_packages: list[str] = []
+    for package_name, package_version in list_packages():
+        package_versions: Sequence[str] = read_package_versions(package_name)
+        if package_versions and package_version != package_versions[-1]:
+            print(
+                f"{package_name} is {package_version}, "
+                f"however {package_versions[-1]} available"
+            )
+            outdated_packages.append(package_name)
     if not outdated_packages:
         print("No packages to update")
         return
