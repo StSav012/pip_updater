@@ -277,6 +277,17 @@ def list_packages_tree() -> Graph:
                 (package_path / "METADATA").read_text(encoding="utf-8").splitlines()
             )
             package_name: str = find_line(metadata, "Name: ")
+            if (package_path / "direct_url.json").exists():
+                print(f"{package_name} installed directly from a URL", file=sys.stderr)
+                continue
+            if not (installer_file := (package_path / "INSTALLER")).exists():
+                print(f"Unknown installer for {package_name}", file=sys.stderr)
+                continue
+            elif (
+                installer := installer_file.read_text(encoding="utf-8").strip()
+            ) != "pip":
+                print(f"{package_name} installed with {installer}", file=sys.stderr)
+                continue
             packages.add(package_name)
             for line in find_lines(metadata, "Requires-Dist: "):
                 if ";" in line:
