@@ -220,6 +220,7 @@ class PackageFileParser(HTMLParser):
         self._path: deque[str] = deque()
         self._versions: deque[str] = deque()
         self._requires_python: str = ""
+        self._yanked: str = ""
 
     def _is_python_version_valid(self) -> bool:
         for version_condition in self._requires_python.split(","):
@@ -271,7 +272,9 @@ class PackageFileParser(HTMLParser):
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         self._path.append(tag)
-        self._requires_python = dict(attrs).get("data-requires-python", "")
+        attrs_dict: dict[str, str | None] = dict(attrs)
+        self._requires_python = attrs_dict.get("data-requires-python", "")
+        self._yanked = attrs_dict.get("data-yanked", "")
 
     def handle_endtag(self, tag: str) -> None:
         while self._path and self._path.pop() != tag:
@@ -279,6 +282,8 @@ class PackageFileParser(HTMLParser):
 
     def handle_data(self, data: str) -> None:
         if self._path == deque(["html", "body", "a"]):
+            if self._yanked == "Not ready":
+                return
             if not self._is_python_version_valid():
                 return
             valid_suffixes: tuple[str, ...] = (
