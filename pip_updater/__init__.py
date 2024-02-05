@@ -292,6 +292,7 @@ class PackageFileParser(HTMLParser):
                 return
             valid_suffixes: tuple[str, ...] = (
                 ".whl",
+                ".tar.bz2",
                 ".tar.gz",
                 ".zip",
             )
