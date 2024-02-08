@@ -294,6 +294,7 @@ class PackageFileParser(HTMLParser):
                 ".whl",
                 ".tar.bz2",
                 ".tar.gz",
+                ".tgz",
                 ".zip",
             )
             silently_invalid_suffixes: tuple[str, ...] = (
