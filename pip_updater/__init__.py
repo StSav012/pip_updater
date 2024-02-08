@@ -301,6 +301,7 @@ class PackageFileParser(HTMLParser):
                 ".exe",
                 ".msi",
                 ".egg",
+                ".noarch.rpm",
                 ".src.rpm",
             )
             if data.endswith(valid_suffixes):
