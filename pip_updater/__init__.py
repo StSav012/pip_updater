@@ -10,7 +10,7 @@ from collections import deque
 from html.parser import HTMLParser
 from http.client import HTTPResponse
 from pathlib import Path
-from subprocess import PIPE, Popen
+from subprocess import Popen
 from typing import Iterable, Iterator, Sequence
 from urllib.error import HTTPError
 from urllib.request import urlopen
@@ -344,18 +344,12 @@ def read_package_versions(package_name: str, pre: bool = False) -> Sequence[str]
     return parser.versions
 
 
-def update_package(package_name: str) -> tuple[str, str, int]:
+def update_package(package_name: str) -> int:
     p: Popen
     with Popen(
         args=[sys.executable, "-m", "pip", "install", "-U", package_name],
-        stdout=PIPE,
-        stderr=PIPE,
-        text=True,
     ) as p:
-        err: str = p.stderr.read()
-        if err:
-            sys.stderr.write(err)
-        return p.stdout.read(), err, p.returncode
+        return p.returncode
 
 
 def update_packages() -> None:
@@ -377,19 +371,16 @@ def update_packages() -> None:
     for pp in priority_packages:
         if pp in outdated_packages:
             print(f"Updating {pp}")
-            out, err, ret = update_package(pp)
-            print(out)
+            ret = update_package(pp)
             if ret:
-                sys.stderr.write(err)
                 return
             outdated_packages.remove(pp)
     for op in outdated_packages:
         print(f"Updating {op}")
-        out, err, ret = update_package(op)
-        print(out)
+        ret = update_package(op)
         if ret:
-            sys.stderr.write(err)
             # continue with other packages
+            pass
 
 
 def list_packages() -> Iterator[tuple[str, str]]:
