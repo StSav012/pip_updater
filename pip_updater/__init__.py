@@ -220,7 +220,7 @@ def is_python_version_greater(version: str) -> bool:
 class PackageFileParser(HTMLParser):
     def __init__(self, package_name: str, *, pre: bool = False) -> None:
         super().__init__()
-        self._package_name: str = package_name.replace("-", "_")
+        self._package_name: str = package_name.replace("-", "_").casefold()
         self._path: deque[str] = deque()
         self._versions: deque[str] = deque()
         self._pre: bool = pre
@@ -291,6 +291,7 @@ class PackageFileParser(HTMLParser):
                 return
             if not self._is_python_version_valid():
                 return
+            data = data.casefold()
             valid_suffixes: tuple[str, ...] = (
                 ".whl",
                 ".tar.bz2",
