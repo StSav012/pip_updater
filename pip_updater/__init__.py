@@ -1,6 +1,4 @@
 # coding: utf-8
-from __future__ import annotations
-
 import os
 import platform
 import re
@@ -11,7 +9,7 @@ from html.parser import HTMLParser
 from http.client import HTTPResponse
 from pathlib import Path
 from subprocess import Popen
-from typing import Iterable, Iterator, Sequence
+from typing import Iterable, Iterator, Literal, Protocol, Sequence
 from urllib.error import HTTPError
 from urllib.request import urlopen
 
@@ -34,15 +32,17 @@ class Graph:
         def __str__(self) -> str:
             return self.value
 
-        def __eq__(self, other: Graph.Node | str) -> bool:
+        def __eq__(self, other: object) -> bool:
             if isinstance(other, str):
                 return self.value == other
-            return self.value == other.value
+            if isinstance(other, Graph.Node):
+                return self.value == other.value
+            return NotImplemented
 
         def __hash__(self) -> int:
             return hash(self.value)
 
-        def __getitem__(self, item: str) -> Graph.Node:
+        def __getitem__(self, item: str) -> "Graph.Node":
             if self == item:
                 return self
             node: Graph.Node
@@ -54,7 +54,7 @@ class Graph:
     def __init__(self) -> None:
         self.nodes: set[Graph.Node] = set()
 
-    def find(self, value: str) -> Graph.Node | None:
+    def find(self, value: str) -> Node | None:
         def recursive_find(where: Iterable[Graph.Node]) -> Graph.Node | None:
             node: Graph.Node
             for node in where:
@@ -63,10 +63,11 @@ class Graph:
                 found: None | Graph.Node = recursive_find(node.children)
                 if found is not None:
                     return found
+            return None
 
         return recursive_find(self.nodes)
 
-    def add_node(self, parent: str | Graph.Node, value: str | None = None) -> None:
+    def add_node(self, parent: str | Node, value: str | None = None) -> None:
         if isinstance(parent, str):
             found_parent: Graph.Node | None = self.find(parent)
             if found_parent is None:
@@ -96,19 +97,20 @@ class Graph:
             + ")"
         )
 
-    def __invert__(self) -> Graph:
+    def __invert__(self) -> "Graph":
         graph: Graph = Graph()
 
         def recursive_children(child_node: Graph.Node) -> None:
             def recursive_parents(
-                parent_node: Graph.Node, parents: set[Graph.Node]
+                parent_node: Graph.Node,
+                parents: set[Graph.Node],
             ) -> None:
                 if not parents:
                     return
                 parent: Graph.Node
                 for parent in parents:
                     parent_node.children.add(Graph.Node(parent.value))
-                parents: set[Graph.Node] = parent_node.children.copy()
+                parents = parent_node.children.copy()
                 while parents:
                     parent = parents.pop()
                     recursive_parents(parent_node[parent.value], parent.parents)
@@ -278,8 +280,8 @@ class PackageFileParser(HTMLParser):
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         self._path.append(tag)
         attrs_dict: dict[str, str | None] = dict(attrs)
-        self._requires_python = attrs_dict.get("data-requires-python", "")
-        self._yanked = attrs_dict.get("data-yanked", "")
+        self._requires_python = attrs_dict.get("data-requires-python", "") or ""
+        self._yanked = attrs_dict.get("data-yanked", "") or ""
 
     def handle_endtag(self, tag: str) -> None:
         while self._path and self._path.pop() != tag:
@@ -345,7 +347,7 @@ def read_package_versions(package_name: str, pre: bool = False) -> Sequence[str]
 
 
 def update_package(package_name: str) -> int:
-    p: Popen
+    p: Popen[bytes]
     with Popen(
         args=[sys.executable, "-m", "pip", "install", "-U", package_name],
     ) as p:
@@ -414,6 +416,28 @@ def list_packages() -> Iterator[tuple[str, str]]:
             yield package_name, package_version
 
 
+class VersionInfoType(Protocol):
+    @property
+    def major(self) -> int:
+        return 0
+
+    @property
+    def minor(self) -> int:
+        return 0
+
+    @property
+    def micro(self) -> int:
+        return 0
+
+    @property
+    def releaselevel(self) -> Literal["alpha", "beta", "candidate", "final"]:
+        return "final"
+
+    @property
+    def serial(self) -> int:
+        return 0
+
+
 def list_packages_tree() -> Graph:
     site_paths: set[Path] = set()
     graph: Graph = Graph()
@@ -423,9 +447,9 @@ def list_packages_tree() -> Graph:
     extras: dict[str, set[str]] = {}
     packages: set[str] = set()
 
-    def format_full_version(info) -> str:
+    def format_full_version(info: VersionInfoType) -> str:
         version: str = f"{info.major}.{info.minor}.{info.micro}"
-        kind: str = info.releaselevel
+        kind: Literal["alpha", "beta", "candidate", "final"] = info.releaselevel
         if kind != "final":
             version += kind[0] + str(info.serial)
         return version
@@ -490,8 +514,9 @@ def list_packages_tree() -> Graph:
                     if (extra := match.group("extra")) is not None:
                         extras.get(package, set()).update(
                             set(
-                                pattern.match(e.strip()).group()
+                                e_match.group()
                                 for e in extra.strip(",")
+                                if (e_match := pattern.match(e.strip())) is not None
                             )
                         )
 
