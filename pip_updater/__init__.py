@@ -218,11 +218,12 @@ def is_python_version_greater(version: str) -> bool:
 
 
 class PackageFileParser(HTMLParser):
-    def __init__(self, package_name: str) -> None:
+    def __init__(self, package_name: str, *, pre: bool = False) -> None:
         super().__init__()
         self._package_name: str = package_name.replace("-", "_")
         self._path: deque[str] = deque()
         self._versions: deque[str] = deque()
+        self._pre: bool = pre
         self._requires_python: str = ""
         self._yanked: str = ""
 
@@ -317,6 +318,9 @@ class PackageFileParser(HTMLParser):
             )
             if parts:
                 version, *parts = parts
+                if not self._pre and not version.split(".")[-1].isdecimal():
+                    # likely ends with “rc,” “dev,” “a,” or “b”
+                    return
                 if not parts or self._is_arch_valid(parts[-1]):
                     self._versions.append(version)
 
@@ -325,9 +329,9 @@ class PackageFileParser(HTMLParser):
         return self._versions
 
 
-def read_package_versions(package_name: str) -> Sequence[str]:
+def read_package_versions(package_name: str, pre: bool = False) -> Sequence[str]:
     r: HTTPResponse
-    parser: PackageFileParser = PackageFileParser(package_name)
+    parser: PackageFileParser = PackageFileParser(package_name, pre=pre)
     try:
         with urlopen(f"https://pypi.org/simple/{package_name.replace('_', '-')}/") as r:
             parser.feed(r.read().decode())
@@ -354,10 +358,11 @@ def update_package(package_name: str) -> tuple[str, str, int]:
 
 
 def update_packages() -> None:
+    pre: bool = "--pre" in sys.argv
     priority_packages: list[str] = ["pip", "setuptools", "wheel"]
     outdated_packages: list[str] = []
     for package_name, package_version in list_packages():
-        package_versions: Sequence[str] = read_package_versions(package_name)
+        package_versions: Sequence[str] = read_package_versions(package_name, pre=pre)
         if package_versions and package_version != package_versions[-1]:
             print(
                 f"{package_name} is {package_version}, "
