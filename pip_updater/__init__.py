@@ -389,7 +389,7 @@ def list_packages() -> Iterator[tuple[str, str]]:
     site_paths: set[Path] = set()
     site_path: Path
     for site_path in map(Path, site.getsitepackages()):
-        if any(p.samefile(site_path) for p in site_paths):
+        if not site_path.exists() or any(p.samefile(site_path) for p in site_paths):
             continue
         site_paths.add(site_path)
 
@@ -456,7 +456,7 @@ def list_packages_tree() -> Graph:
 
     site_path: Path
     for site_path in map(Path, site.getsitepackages()):
-        if any(p.samefile(site_path) for p in site_paths):
+        if not site_path.exists() or any(p.samefile(site_path) for p in site_paths):
             continue
         site_paths.add(site_path)
 
