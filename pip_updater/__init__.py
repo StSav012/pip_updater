@@ -5,6 +5,7 @@ import re
 import site
 import sys
 from collections import deque
+from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from html.parser import HTMLParser
 from http.client import HTTPResponse
 from pathlib import Path
@@ -358,14 +359,33 @@ def update_packages() -> None:
     pre: bool = "--pre" in sys.argv
     priority_packages: list[str] = ["pip", "setuptools", "wheel"]
     outdated_packages: list[str] = []
-    for package_name, package_version in list_packages():
-        package_versions: Sequence[str] = read_package_versions(package_name, pre=pre)
-        if package_versions and package_version != package_versions[-1]:
-            print(
-                f"{package_name} is {package_version}, "
-                f"however {package_versions[-1]} available"
+    with ThreadPoolExecutor(max_workers=16) as executor:
+        package_version_workers: dict[Future[Sequence[str]], tuple[str, str]] = {
+            executor.submit(read_package_versions, package_name, pre=pre): (
+                package_name,
+                package_version,
             )
-            outdated_packages.append(package_name)
+            for package_name, package_version in list_packages()
+        }
+        future: Future[Sequence[str]]
+        for future in as_completed(package_version_workers):
+            package_name: str
+            package_version: str
+            package_name, package_version = package_version_workers[future]
+            try:
+                package_versions: Sequence[str] = future.result()
+            except Exception as ex:
+                print(
+                    f"Failed to load available versions for {package_name}: {ex}",
+                    file=sys.stderr,
+                )
+            else:
+                if package_versions and package_version != package_versions[-1]:
+                    print(
+                        f"{package_name} is {package_version}, "
+                        f"however {package_versions[-1]} available"
+                    )
+                    outdated_packages.append(package_name)
     if not outdated_packages:
         print("No packages to update")
         return
