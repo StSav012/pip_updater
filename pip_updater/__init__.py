@@ -15,6 +15,17 @@ from urllib.error import HTTPError
 from urllib.request import urlopen
 
 
+__all__ = [
+    "Graph",
+    "read_package_versions",
+    "list_packages_tree",
+    "update_packages",
+    "update_package",
+    "orphaned_packages",
+    "print_orphaned_packages",
+]
+
+
 class Graph:
     class Node:
         def __init__(self, value: str) -> None:
