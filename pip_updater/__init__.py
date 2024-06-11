@@ -333,7 +333,11 @@ class PackageFileParser(HTMLParser):
             )
             if parts:
                 version, *parts = parts
-                if not self._pre and not version.split(".")[-1].isdecimal():
+                last_version_part: str = version.split(".")[-1]
+                if not self._pre and not (
+                    last_version_part.isdecimal()
+                    or last_version_part.startswith("post")
+                ):
                     # likely ends with “rc,” “dev,” “a,” or “b”
                     return
                 if not parts or self._is_arch_valid(parts[-1]):
