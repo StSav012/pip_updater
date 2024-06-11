@@ -368,6 +368,7 @@ def update_package(package_name: str) -> int:
 
 def update_packages() -> None:
     pre: bool = "--pre" in sys.argv
+    dry_run: bool = "--dry-run" in sys.argv
     priority_packages: list[str] = ["pip", "setuptools", "wheel"]
     outdated_packages: list[str] = []
     with ThreadPoolExecutor(max_workers=16) as executor:
@@ -399,6 +400,9 @@ def update_packages() -> None:
                     outdated_packages.append(package_name)
     if not outdated_packages:
         print("No packages to update")
+        return
+    
+    if dry_run:
         return
 
     for pp in priority_packages:
