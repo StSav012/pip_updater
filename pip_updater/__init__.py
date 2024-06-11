@@ -1,4 +1,5 @@
 # coding: utf-8
+import json
 import os
 import platform
 import re
@@ -9,8 +10,17 @@ from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from html.parser import HTMLParser
 from http.client import HTTPResponse
 from pathlib import Path
-from subprocess import Popen
-from typing import Iterable, Iterator, Literal, Protocol, Sequence
+from subprocess import Popen, PIPE
+from typing import (
+    Any,
+    Final,
+    Iterable,
+    Iterator,
+    Literal,
+    NamedTuple,
+    Protocol,
+    Sequence,
+)
 from urllib.error import HTTPError
 from urllib.request import urlopen
 
@@ -24,6 +34,12 @@ __all__ = [
     "orphaned_packages",
     "print_orphaned_packages",
 ]
+
+PIP: Final[str] = "pip"
+
+VCS_VERSION_TEMPLATES: Final[dict[str, Sequence[str]]] = {
+    "git": ["git", "ls-remote", "--heads", "{url}"]
+}
 
 
 class Graph:
@@ -348,24 +364,58 @@ class PackageFileParser(HTMLParser):
         return self._versions
 
 
-def read_package_versions(package_name: str, pre: bool = False) -> Sequence[str]:
-    r: HTTPResponse
-    parser: PackageFileParser = PackageFileParser(package_name, pre=pre)
-    try:
-        with urlopen(f"https://pypi.org/simple/{package_name.replace('_', '-')}/") as r:
-            parser.feed(r.read().decode())
-    except HTTPError as ex:
-        if ex.code == 404:
-            print(f"{package_name} not found", file=sys.stderr)
-        else:
-            print(f"{package_name}: {ex!s}", file=sys.stderr)
-    return parser.versions
+class PackageData(NamedTuple):
+    name: str
+    version: str
+    aux_data: dict[str, Any] = {}
 
 
-def update_package(package_name: str) -> int:
+def read_package_versions(
+    package_data: PackageData,
+    pre: bool = False,
+) -> Sequence[str]:
+    def read_package_versions_pip() -> Sequence[str]:
+        r: HTTPResponse
+        parser: PackageFileParser = PackageFileParser(package_data.name, pre=pre)
+        try:
+            with urlopen(
+                f"https://pypi.org/simple/{package_data.name.replace('_', '-')}/"
+            ) as r:
+                parser.feed(r.read().decode())
+        except HTTPError as ex:
+            if ex.code == 404:
+                print(f"{package_data.name} not found", file=sys.stderr)
+            else:
+                print(f"{package_data.name}: {ex!s}", file=sys.stderr)
+        return parser.versions
+
+    def read_package_versions_vcs() -> Sequence[str]:
+        p: Popen[bytes]
+        with Popen(
+            args=[arg.format(url=url) for arg in VCS_VERSION_TEMPLATES[vcs]],
+            stdout=PIPE,
+        ) as p:
+            return [p.stdout.read().split()[0].decode()]
+
+    if package_data.aux_data:
+        url: str = package_data.aux_data.get("url", "")
+        vcs: str = package_data.aux_data.get("vcs_info", {}).get("vcs", "")
+        if url and vcs in VCS_VERSION_TEMPLATES:
+            return read_package_versions_vcs()
+
+    return read_package_versions_pip()
+
+
+def update_package(package_data: PackageData) -> int:
+    package_description: str = package_data.name
+    if package_data.aux_data:
+        url: str = package_data.aux_data.get("url", "")
+        vcs: str = package_data.aux_data.get("vcs_info", {}).get("vcs", "")
+        package_description = "+".join((vcs, url))
+
     p: Popen[bytes]
     with Popen(
-        args=[sys.executable, "-m", "pip", "install", "-U", package_name],
+        args=[sys.executable, "-m", PIP, "install", "-U", package_description],
     ) as p:
         return p.returncode
 
@@ -373,58 +423,57 @@ def update_package(package_name: str) -> int:
 def update_packages() -> None:
     pre: bool = "--pre" in sys.argv
     dry_run: bool = "--dry-run" in sys.argv
-    priority_packages: list[str] = ["pip", "setuptools", "wheel"]
-    outdated_packages: list[str] = []
+    priority_packages: list[str] = [PIP, "setuptools", "wheel"]
+    outdated_packages: list[PackageData] = []
     with ThreadPoolExecutor(max_workers=16) as executor:
-        package_version_workers: dict[Future[Sequence[str]], tuple[str, str]] = {
-            executor.submit(read_package_versions, package_name, pre=pre): (
-                package_name,
-                package_version,
+        package_version_workers: dict[Future[Sequence[str]], PackageData] = {
+            executor.submit(read_package_versions, package_data, pre=pre): (
+                package_data
             )
-            for package_name, package_version in list_packages()
+            for package_data in list_packages()
         }
         future: Future[Sequence[str]]
         for future in as_completed(package_version_workers):
-            package_name: str
-            package_version: str
-            package_name, package_version = package_version_workers[future]
+            package_data: PackageData = package_version_workers[future]
             try:
                 package_versions: Sequence[str] = future.result()
             except Exception as ex:
                 print(
-                    f"Failed to load available versions for {package_name}: {ex}",
+                    f"Failed to load available versions for {package_data.name}: {ex}",
                     file=sys.stderr,
                 )
             else:
-                if package_versions and package_version != package_versions[-1]:
+                if package_versions and package_data.version != package_versions[-1]:
                     print(
-                        f"{package_name} is {package_version}, "
+                        f"{package_data.name} is {package_data.version}, "
                         f"however {package_versions[-1]} available"
                     )
-                    outdated_packages.append(package_name)
+                    outdated_packages.append(package_data)
     if not outdated_packages:
         print("No packages to update")
         return
-    
+
     if dry_run:
         return
 
     for pp in priority_packages:
-        if pp in outdated_packages:
-            print(f"Updating {pp}")
-            ret = update_package(pp)
-            if ret:
-                return
-            outdated_packages.remove(pp)
+        for op in outdated_packages:
+            if pp == op.name:
+                print(f"Updating {pp}")
+                ret = update_package(op)
+                if ret:
+                    return
+                outdated_packages.remove(op)
+                break
     for op in outdated_packages:
-        print(f"Updating {op}")
+        print(f"Updating {op.name}")
         ret = update_package(op)
         if ret:
             # continue with other packages
             pass
 
 
-def list_packages() -> Iterator[tuple[str, str]]:
+def list_packages() -> Iterator[PackageData]:
     site_paths: set[Path] = set()
     site_path: Path
     for site_path in map(Path, site.getsitepackages()):
@@ -441,18 +490,24 @@ def list_packages() -> Iterator[tuple[str, str]]:
             )
             package_name: str = find_line(metadata, "Name: ")
             package_version: str = find_line(metadata, "Version: ")
+            direct_url_data: dict[str, Any] = {}
             if (package_path / "direct_url.json").exists():
                 print(f"{package_name} installed directly from a URL", file=sys.stderr)
-                continue
+                direct_url_data = json.loads(
+                    (package_path / "direct_url.json").read_bytes()
+                )
+                package_version = direct_url_data.get("vcs_info", {}).get(
+                    "commit_id", package_version
+                )
             if not (installer_file := (package_path / "INSTALLER")).exists():
                 print(f"Unknown installer for {package_name}", file=sys.stderr)
                 continue
             elif (
                 installer := installer_file.read_text(encoding="utf-8").strip()
-            ) != "pip":
+            ) != PIP:
                 print(f"{package_name} installed with {installer}", file=sys.stderr)
                 continue
-            yield package_name, package_version
+            yield PackageData(package_name, package_version, direct_url_data)
 
 
 class VersionInfoType(Protocol):
@@ -515,7 +570,7 @@ def list_packages_tree() -> Graph:
                 continue
             elif (
                 installer := installer_file.read_text(encoding="utf-8").strip()
-            ) != "pip":
+            ) != PIP:
                 print(f"{package_name} installed with {installer}", file=sys.stderr)
                 continue
             packages.add(package_name)
@@ -566,7 +621,7 @@ def list_packages_tree() -> Graph:
 
 
 def orphaned_packages() -> frozenset[str]:
-    return list_packages_tree().top() - frozenset(("pip", "setuptools"))
+    return list_packages_tree().top() - frozenset((PIP, "setuptools"))
 
 
 def print_orphaned_packages() -> None:
