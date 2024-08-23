@@ -7,11 +7,12 @@ import site
 import sys
 from collections import deque
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
+from functools import cache
 from html.parser import HTMLParser
 from http.client import HTTPResponse
 from pathlib import Path
 from shutil import which
-from subprocess import Popen, PIPE
+from subprocess import PIPE, Popen
 from typing import (
     Any,
     Final,
@@ -25,7 +26,6 @@ from typing import (
 from urllib.error import HTTPError
 from urllib.request import urlopen
 
-
 __all__ = [
     "Graph",
     "read_package_versions",
@@ -35,6 +35,8 @@ __all__ = [
     "orphaned_packages",
     "print_orphaned_packages",
 ]
+
+DIST_INFO_PATTERN: Final[str] = "*.dist-info"
 
 PIP: Final[str] = "pip"
 UV: Final[str] = "uv"
@@ -479,41 +481,52 @@ def update_packages() -> None:
             pass
 
 
-def list_packages() -> Iterator[PackageData]:
-    site_paths: set[Path] = set()
-    site_path: Path
-    for site_path in map(Path, site.getsitepackages()):
-        if not site_path.exists() or any(p.samefile(site_path) for p in site_paths):
+@cache
+def site_paths() -> frozenset[Path]:
+    paths: set[Path] = set()
+    path: Path
+    for path in map(Path, site.getsitepackages()):
+        if not path.exists() or any(p.samefile(path) for p in paths):
             continue
-        site_paths.add(site_path)
+        paths.add(path)
+    return frozenset(paths)
 
+
+def read_metadata(package_path: Path) -> list[str]:
+    return (package_path / "METADATA").read_text(encoding="utf-8").splitlines()
+
+
+def read_package_data(package_path: Path) -> PackageData:
+    metadata: list[str] = read_metadata(package_path)
+    package_name: str = find_line(metadata, "Name: ")
+    package_version: str = find_line(metadata, "Version: ")
+    direct_url_data: dict[str, Any] = {}
+    if (package_path / "direct_url.json").exists():
+        print(f"{package_name} installed directly from a URL", file=sys.stderr)
+        direct_url_data = json.loads((package_path / "direct_url.json").read_bytes())
+        package_version = direct_url_data.get("vcs_info", {}).get(
+            "commit_id", package_version
+        )
+    return PackageData(package_name, package_version, direct_url_data)
+
+
+def list_packages() -> Iterator[PackageData]:
+    site_path: Path
+    for site_path in site_paths():
         package_path: Path
-        for package_path in site_path.glob("*.dist-info"):
+        for package_path in site_path.glob(DIST_INFO_PATTERN):
             if package_path.name.startswith("~"):
                 continue
-            metadata: list[str] = (
-                (package_path / "METADATA").read_text(encoding="utf-8").splitlines()
-            )
-            package_name: str = find_line(metadata, "Name: ")
-            package_version: str = find_line(metadata, "Version: ")
-            direct_url_data: dict[str, Any] = {}
-            if (package_path / "direct_url.json").exists():
-                print(f"{package_name} installed directly from a URL", file=sys.stderr)
-                direct_url_data = json.loads(
-                    (package_path / "direct_url.json").read_bytes()
-                )
-                package_version = direct_url_data.get("vcs_info", {}).get(
-                    "commit_id", package_version
-                )
+            pd: PackageData = read_package_data(package_path)
             if not (installer_file := (package_path / "INSTALLER")).exists():
-                print(f"Unknown installer for {package_name}", file=sys.stderr)
+                print(f"Unknown installer for {pd.name}", file=sys.stderr)
                 continue
             elif (
                 installer := installer_file.read_text(encoding="utf-8").strip()
             ) not in (PIP, UV):
-                print(f"{package_name} installed with {installer}", file=sys.stderr)
+                print(f"{pd.name} installed with {installer}", file=sys.stderr)
                 continue
-            yield PackageData(package_name, package_version, direct_url_data)
+            yield pd
 
 
 class VersionInfoType(Protocol):
@@ -539,7 +552,6 @@ class VersionInfoType(Protocol):
 
 
 def list_packages_tree() -> Graph:
-    site_paths: set[Path] = set()
     graph: Graph = Graph()
     pattern: re.Pattern[str] = re.compile(
         r"^(?P<package>[\w\-]*)[^;]*(;\s*\[(?P<extra>[^]]+)])?$"
@@ -555,18 +567,12 @@ def list_packages_tree() -> Graph:
         return version
 
     site_path: Path
-    for site_path in map(Path, site.getsitepackages()):
-        if not site_path.exists() or any(p.samefile(site_path) for p in site_paths):
-            continue
-        site_paths.add(site_path)
-
+    for site_path in site_paths():
         package_path: Path
-        for package_path in site_path.glob("*.dist-info"):
+        for package_path in site_path.glob(DIST_INFO_PATTERN):
             if package_path.name.startswith("~"):
                 continue
-            metadata: list[str] = (
-                (package_path / "METADATA").read_text(encoding="utf-8").splitlines()
-            )
+            metadata: list[str] = read_metadata(package_path)
             package_name: str = find_line(metadata, "Name: ")
             if (package_path / "direct_url.json").exists():
                 print(f"{package_name} installed directly from a URL", file=sys.stderr)
