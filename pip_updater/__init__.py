@@ -451,12 +451,18 @@ def update_packages() -> None:
                     file=sys.stderr,
                 )
             else:
-                if package_versions and package_data.version != package_versions[-1]:
+                if package_versions and package_data.version != (
+                    latest_version := package_versions[-1]
+                ):
                     print(
                         f"{package_data.name} is {package_data.version}, "
-                        f"however {package_versions[-1]} available"
+                        f"however {latest_version} available"
                     )
-                    outdated_packages.append(package_data)
+                    outdated_packages.append(
+                        PackageData(
+                            package_data.name, latest_version, package_data.aux_data
+                        )
+                    )
     if not outdated_packages:
         print("No packages to update")
         return
@@ -474,6 +480,20 @@ def update_packages() -> None:
                 outdated_packages.remove(op)
                 break
     for op in outdated_packages:
+        package_path: Path | None = None
+        for site_path in site_paths():
+            dist_info_paths = [
+                *site_path.glob(op.name + DIST_INFO_PATTERN),
+                *site_path.glob(op.name.replace("-", "_") + DIST_INFO_PATTERN),
+            ]
+            if dist_info_paths:
+                package_path = dist_info_paths[-1]
+                break
+        if package_path is not None and package_path.exists():
+            pd: PackageData = read_package_data(package_path)
+            if pd.version == op.version:
+                print(f"Already updated {op.name}")
+                continue
         print(f"Updating {op.name}")
         ret = update_package(op)
         if ret:
