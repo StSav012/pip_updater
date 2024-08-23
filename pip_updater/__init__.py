@@ -10,6 +10,7 @@ from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from html.parser import HTMLParser
 from http.client import HTTPResponse
 from pathlib import Path
+from shutil import which
 from subprocess import Popen, PIPE
 from typing import (
     Any,
@@ -36,6 +37,8 @@ __all__ = [
 ]
 
 PIP: Final[str] = "pip"
+UV: Final[str] = "uv"
+UV_CMD: Final[str | None] = which(UV)
 
 VCS_VERSION_TEMPLATES: Final[dict[str, Sequence[str]]] = {
     "git": ["git", "ls-remote", "--heads", "{url}"]
@@ -413,9 +416,12 @@ def update_package(package_data: PackageData) -> int:
         vcs: str = package_data.aux_data.get("vcs_info", {}).get("vcs", "")
         package_description = "+".join((vcs, url))
 
+    executable: list[str] = (
+        [UV_CMD, PIP] if UV_CMD is not None else [sys.executable, "-m", PIP]
+    )
     p: Popen[bytes]
     with Popen(
-        args=[sys.executable, "-m", PIP, "install", "-U", package_description],
+        args=[*executable, "install", "-U", package_description],
     ) as p:
         return p.returncode
 
@@ -504,7 +510,7 @@ def list_packages() -> Iterator[PackageData]:
                 continue
             elif (
                 installer := installer_file.read_text(encoding="utf-8").strip()
-            ) != PIP:
+            ) not in (PIP, UV):
                 print(f"{package_name} installed with {installer}", file=sys.stderr)
                 continue
             yield PackageData(package_name, package_version, direct_url_data)
@@ -570,7 +576,7 @@ def list_packages_tree() -> Graph:
                 continue
             elif (
                 installer := installer_file.read_text(encoding="utf-8").strip()
-            ) != PIP:
+            ) not in (PIP, UV):
                 print(f"{package_name} installed with {installer}", file=sys.stderr)
                 continue
             packages.add(package_name)
