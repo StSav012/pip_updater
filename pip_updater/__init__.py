@@ -418,12 +418,14 @@ def update_package(package_data: PackageData) -> int:
         vcs: str = package_data.aux_data.get("vcs_info", {}).get("vcs", "")
         package_description = "+".join((vcs, url))
 
-    executable: list[str] = (
-        [UV_CMD, PIP] if UV_CMD is not None else [sys.executable, "-m", PIP]
+    args: list[str] = (
+        [UV_CMD, PIP, "install", "--python", sys.executable, "-U"]
+        if UV_CMD is not None
+        else [sys.executable, "-m", PIP, "install", "-U"]
     )
     p: Popen[bytes]
     with Popen(
-        args=[*executable, "install", "-U", package_description],
+        args=[*args, package_description],
     ) as p:
         return p.returncode
 
