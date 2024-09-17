@@ -513,7 +513,10 @@ def site_paths() -> frozenset[Path]:
 
 
 def read_metadata(package_path: Path) -> list[str]:
-    return (package_path / "METADATA").read_text(encoding="utf-8").splitlines()
+    if (path := (package_path / "METADATA")).exists():
+        return path.read_text(encoding="utf-8").splitlines()
+    else:
+        return []
 
 
 def read_package_data(package_path: Path) -> PackageData:
