@@ -12,6 +12,7 @@ from html.parser import HTMLParser
 from http.client import HTTPResponse
 from pathlib import Path
 from shutil import which
+from ssl import SSLCertVerificationError, SSLContext
 from subprocess import PIPE, Popen
 from typing import (
     Any,
@@ -23,7 +24,7 @@ from typing import (
     Protocol,
     Sequence,
 )
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
 from urllib.request import urlopen
 
 __all__ = [
@@ -392,6 +393,24 @@ def read_package_versions(
                 print(f"{package_data.name} not found", file=sys.stderr)
             else:
                 print(f"{package_data.name}: {ex!s}", file=sys.stderr)
+        except URLError as ex:
+            if isinstance(ex.reason, SSLCertVerificationError):
+                print("CRITICAL: SSL Certificate Verification failed.", end=" ")
+                while (
+                    decision := input("Continue insecurely? [y|n]").casefold()
+                ) not in ("y", "n"):
+                    pass
+                if decision == "y":
+                    with urlopen(
+                        f"https://pypi.org/simple/{package_data.name.replace('_', '-')}/",
+                        context=SSLContext(),
+                    ) as r:
+                        parser.feed(r.read().decode())
+                else:
+                    print(f"Skipping {package_data.name}", file=sys.stderr)
+                    return []
+            else:
+                raise
         return parser.versions
 
     def read_package_versions_vcs() -> Sequence[str]:
