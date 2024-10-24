@@ -405,6 +405,10 @@ def read_package_versions(
     if package_data.aux_data:
         url: str = package_data.aux_data.get("url", "")
         vcs: str = package_data.aux_data.get("vcs_info", {}).get("vcs", "")
+        if not vcs and "dir_info" in package_data.aux_data:
+            print(f"{package_data.name} is installed from a local source")
+            return []
+        print(f"{package_data.name} is installed directly from a URL")
         if url and vcs in VCS_VERSION_TEMPLATES:
             return read_package_versions_vcs()
 
@@ -532,7 +536,6 @@ def read_package_data(package_path: Path) -> PackageData:
     package_version: str = find_line(metadata, "Version: ")
     direct_url_data: dict[str, Any] = {}
     if (package_path / "direct_url.json").exists():
-        print(f"{package_name} installed directly from a URL", file=sys.stderr)
         direct_url_data = json.loads((package_path / "direct_url.json").read_bytes())
         package_version = direct_url_data.get("vcs_info", {}).get(
             "commit_id", package_version
