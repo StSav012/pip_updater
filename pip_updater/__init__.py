@@ -452,7 +452,6 @@ def update_package(package_data: PackageData) -> int:
         if UV_CMD is not None
         and not (
             sys.platform == "win32"
-            and sys.base_exec_prefix == sys.exec_prefix  # no venv
             and package_description == UV  # unable to overwrite itself
         )
         else [sys.executable, "-m", PIP, "install", "-U"]
