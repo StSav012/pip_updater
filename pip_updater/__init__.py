@@ -443,6 +443,7 @@ def read_package_versions(
 def update_package(
     package_data: PackageData,
     executable: str | os.PathLike[str] | None = None,
+    use_pure_pip: bool = False,
 ) -> int:
     if not executable:
         executable = sys.executable
@@ -456,6 +457,7 @@ def update_package(
     args: list[str] = (
         [UV_CMD, PIP, "install", "--python", executable, "-U"]
         if UV_CMD is not None
+        and not use_pure_pip
         and not (
             sys.platform == "win32"
             and package_description == UV  # unable to overwrite itself
@@ -479,6 +481,11 @@ def update_packages() -> None:
         "--dry-run",
         action="store_true",
         help="check for updates, but don't perform actual updating",
+    )
+    ap.add_argument(
+        "--pure-pip",
+        action="store_true",
+        help="use Python's pip, despite other tools might be available",
     )
     ap.add_argument(
         "venv",
@@ -540,7 +547,9 @@ def update_packages() -> None:
         for op in outdated_packages:
             if pp == op.name:
                 print(f"Updating {pp}")
-                ret = update_package(op, executable=executable)
+                ret = update_package(
+                    op, executable=executable, use_pure_pip=args.pure_pip
+                )
                 if ret:
                     return
                 outdated_packages.remove(op)
@@ -561,7 +570,7 @@ def update_packages() -> None:
                 print(f"Already updated {op.name}")
                 continue
         print(f"Updating {op.name}")
-        ret = update_package(op, executable=executable)
+        ret = update_package(op, executable=executable, use_pure_pip=args.pure_pip)
         if ret:
             # continue with other packages
             pass
