@@ -427,9 +427,13 @@ def read_package_versions(
         if not vcs and "dir_info" in package_data.aux_data:
             print(f"{package_data.name} is installed from a local source")
             return []
-        print(f"{package_data.name} is installed directly from a URL")
-        if url and vcs in VCS_VERSION_TEMPLATES:
-            return read_package_versions_vcs()
+        if url:
+            if vcs in VCS_VERSION_TEMPLATES:
+                return read_package_versions_vcs()
+            else:
+                print(f"{package_data.name} is installed directly from {url}")
+        else:
+            print(f"{package_data.name} came from an unsupported source")
 
     return read_package_versions_pip()
 
