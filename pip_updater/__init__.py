@@ -547,7 +547,7 @@ def update_packages() -> None:
                 break
     for op in outdated_packages:
         package_path: Path | None = None
-        for site_path in site_paths():
+        for site_path in site_paths((str(args.venv),)):
             dist_info_paths = [
                 *site_path.glob(op.name + DIST_INFO_PATTERN),
                 *site_path.glob(op.name.replace("-", "_") + DIST_INFO_PATTERN),
