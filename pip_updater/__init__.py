@@ -1,4 +1,4 @@
-# coding: utf-8
+import argparse
 import json
 import os
 import platform
@@ -464,13 +464,23 @@ def update_package(package_data: PackageData) -> int:
 
 
 def update_packages() -> None:
-    pre: bool = "--pre" in sys.argv
-    dry_run: bool = "--dry-run" in sys.argv
+    ap: argparse.ArgumentParser = argparse.ArgumentParser(
+        description="update all Python packages in an environment",
+        epilog="currently, `requirements.txt`, `pyproject.toml`, &c. are ignored",
+    )
+    ap.add_argument("--pre", action="store_true", help="include pre-release versions")
+    ap.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="check for updates, but don't perform actual updating",
+    )
+    args: argparse.Namespace = ap.parse_intermixed_args()
+
     priority_packages: list[str] = [PIP, "setuptools", "wheel"]
     outdated_packages: list[PackageData] = []
     with ThreadPoolExecutor(max_workers=16) as executor:
         package_version_workers: dict[Future[Sequence[str]], PackageData] = {
-            executor.submit(read_package_versions, package_data, pre=pre): (
+            executor.submit(read_package_versions, package_data, pre=args.pre): (
                 package_data
             )
             for package_data in list_packages()
@@ -502,7 +512,7 @@ def update_packages() -> None:
         print("No packages to update")
         return
 
-    if dry_run:
+    if args.dry_run:
         return
 
     for pp in priority_packages:
