@@ -440,7 +440,13 @@ def read_package_versions(
     return read_package_versions_pip()
 
 
-def update_package(package_data: PackageData) -> int:
+def update_package(
+    package_data: PackageData,
+    executable: str | os.PathLike[str] | None = None,
+) -> int:
+    if not executable:
+        executable = sys.executable
+
     package_description: str = package_data.name
     if package_data.aux_data:
         url: str = package_data.aux_data.get("url", "")
@@ -448,13 +454,13 @@ def update_package(package_data: PackageData) -> int:
         package_description = "+".join((vcs, url))
 
     args: list[str] = (
-        [UV_CMD, PIP, "install", "--python", sys.executable, "-U"]
+        [UV_CMD, PIP, "install", "--python", executable, "-U"]
         if UV_CMD is not None
         and not (
             sys.platform == "win32"
             and package_description == UV  # unable to overwrite itself
         )
-        else [sys.executable, "-m", PIP, "install", "-U"]
+        else [executable, "-m", PIP, "install", "-U"]
     )
     p: Popen[bytes]
     with Popen(
@@ -474,6 +480,13 @@ def update_packages() -> None:
         action="store_true",
         help="check for updates, but don't perform actual updating",
     )
+    ap.add_argument(
+        "venv",
+        type=Path,
+        nargs="?",
+        default=Path(sys.exec_prefix),
+        help="a path to a virtual environment to perform the update in (current one by default)",
+    )
     args: argparse.Namespace = ap.parse_intermixed_args()
 
     priority_packages: list[str] = [PIP, "setuptools", "wheel"]
@@ -483,7 +496,7 @@ def update_packages() -> None:
             executor.submit(read_package_versions, package_data, pre=args.pre): (
                 package_data
             )
-            for package_data in list_packages()
+            for package_data in list_packages((str(args.venv),))
         }
         future: Future[Sequence[str]]
         for future in as_completed(package_version_workers):
@@ -512,6 +525,14 @@ def update_packages() -> None:
         print("No packages to update")
         return
 
+    executable: str | None = which(
+        "python", path=args.venv / ("Scripts" if sys.platform == "win32" else "bin")
+    )
+
+    if not executable:
+        print(f"Python environment is not found at {args.venv}")
+        return
+
     if args.dry_run:
         return
 
@@ -519,7 +540,7 @@ def update_packages() -> None:
         for op in outdated_packages:
             if pp == op.name:
                 print(f"Updating {pp}")
-                ret = update_package(op)
+                ret = update_package(op, executable=executable)
                 if ret:
                     return
                 outdated_packages.remove(op)
@@ -540,17 +561,17 @@ def update_packages() -> None:
                 print(f"Already updated {op.name}")
                 continue
         print(f"Updating {op.name}")
-        ret = update_package(op)
+        ret = update_package(op, executable=executable)
         if ret:
             # continue with other packages
             pass
 
 
 @cache
-def site_paths() -> frozenset[Path]:
+def site_paths(prefixes: tuple[str] | None = None) -> frozenset[Path]:
     paths: set[Path] = set()
     path: Path
-    for path in map(Path, site.getsitepackages()):
+    for path in map(Path, site.getsitepackages(prefixes)):
         if not path.exists() or any(p.samefile(path) for p in paths):
             continue
         paths.add(path)
@@ -577,9 +598,9 @@ def read_package_data(package_path: Path) -> PackageData:
     return PackageData(package_name, package_version, direct_url_data)
 
 
-def list_packages() -> Iterator[PackageData]:
+def list_packages(prefixes: tuple[str] | None = None) -> Iterator[PackageData]:
     site_path: Path
-    for site_path in site_paths():
+    for site_path in site_paths(prefixes):
         package_path: Path
         for package_path in site_path.glob(DIST_INFO_PATTERN):
             if package_path.name.startswith("~"):
