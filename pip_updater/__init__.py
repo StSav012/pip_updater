@@ -606,6 +606,9 @@ def list_packages(prefixes: tuple[str] | None = None) -> Iterator[PackageData]:
             if package_path.name.startswith("~"):
                 continue
             pd: PackageData = read_package_data(package_path)
+            if not pd.name:
+                # the package is corrupted beyond repair
+                continue
             if not (installer_file := (package_path / "INSTALLER")).exists():
                 print(f"Unknown installer for {pd.name}", file=sys.stderr)
                 continue
