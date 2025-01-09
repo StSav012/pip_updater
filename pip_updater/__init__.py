@@ -43,9 +43,11 @@ PIP: Final[str] = "pip"
 UV: Final[str] = "uv"
 UV_CMD: Final[str | None] = which(UV)
 
-VCS_VERSION_TEMPLATES: Final[dict[str, Sequence[str]]] = {
-    "git": ["git", "ls-remote", "--heads", "{url}"]
-}
+GIT: Final[str] = "git"
+# Use the `{url}` placeholder to provide a package URL to the VCS
+VCS_VERSION_TEMPLATES: dict[str, Sequence[str]] = {}
+if git := which(GIT):
+    VCS_VERSION_TEMPLATES[GIT] = [git, "ls-remote", "--heads", "{url}"]
 
 
 class Graph:
