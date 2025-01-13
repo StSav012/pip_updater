@@ -532,8 +532,23 @@ def update_packages() -> None:
         print("No packages to update")
         return
 
-    executable: str | None = which(
-        "python", path=args.venv / ("Scripts" if sys.platform == "win32" else "bin")
+    executable: str | None = (
+        which(
+            "python", path=args.venv / ("Scripts" if sys.platform == "win32" else "bin")
+        )
+        or which(
+            "python",
+            path=args.venv
+            / ".venv"
+            / ("Scripts" if sys.platform == "win32" else "bin"),
+        )
+        or which(
+            "python",
+            path=args.venv / "venv" / ("Scripts" if sys.platform == "win32" else "bin"),
+        )
+        or which("python", path=args.venv)
+        or which("python", path=args.venv / ".venv")
+        or which("python", path=args.venv / "venv")
     )
 
     if not executable:
