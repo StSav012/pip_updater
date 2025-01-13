@@ -503,7 +503,13 @@ def update_packages() -> None:
             executor.submit(read_package_versions, package_data, pre=args.pre): (
                 package_data
             )
-            for package_data in list_packages((str(args.venv),))
+            for package_data in list_packages(
+                (
+                    str(args.venv),
+                    str(args.venv / ".venv"),
+                    str(args.venv / "venv"),
+                )
+            )
         }
         future: Future[Sequence[str]]
         for future in as_completed(package_version_workers):
@@ -571,7 +577,13 @@ def update_packages() -> None:
                 break
     for op in outdated_packages:
         package_path: Path | None = None
-        for site_path in site_paths((str(args.venv),)):
+        for site_path in site_paths(
+            (
+                str(args.venv),
+                str(args.venv / ".venv"),
+                str(args.venv / "venv"),
+            )
+        ):
             dist_info_paths = [
                 *site_path.glob(op.name + DIST_INFO_PATTERN),
                 *site_path.glob(op.name.replace("-", "_") + DIST_INFO_PATTERN),
@@ -592,7 +604,7 @@ def update_packages() -> None:
 
 
 @cache
-def site_paths(prefixes: tuple[str] | None = None) -> frozenset[Path]:
+def site_paths(prefixes: tuple[str, ...] | None = None) -> frozenset[Path]:
     paths: set[Path] = set()
     path: Path
     for path in map(Path, site.getsitepackages(prefixes)):
@@ -622,7 +634,7 @@ def read_package_data(package_path: Path) -> PackageData:
     return PackageData(package_name, package_version, direct_url_data)
 
 
-def list_packages(prefixes: tuple[str] | None = None) -> Iterator[PackageData]:
+def list_packages(prefixes: tuple[str, ...] | None = None) -> Iterator[PackageData]:
     site_path: Path
     for site_path in site_paths(prefixes):
         package_path: Path
