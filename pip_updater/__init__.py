@@ -494,11 +494,16 @@ def update_packages() -> None:
         default=Path(sys.exec_prefix),
         help="a path to a virtual environment to perform the update in (current one by default)",
     )
+    ap.add_argument(
+        "-s",
+        action="store_true",
+        help="do it safely, slowly, and single-threaded",
+    )
     args: argparse.Namespace = ap.parse_intermixed_args()
 
     priority_packages: list[str] = [PIP, "setuptools", "wheel"]
     outdated_packages: list[PackageData] = []
-    with ThreadPoolExecutor(max_workers=16) as executor:
+    with ThreadPoolExecutor(max_workers=1 if args.s else 16) as executor:
         package_version_workers: dict[Future[Sequence[str]], PackageData] = {
             executor.submit(read_package_versions, package_data, pre=args.pre): (
                 package_data
