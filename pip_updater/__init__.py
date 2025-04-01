@@ -325,7 +325,7 @@ class PackageFileParser(HTMLParser):
 
     def handle_data(self, data: str) -> None:
         if self._path == deque(["html", "body", "a"]):
-            if self._yanked == "Not ready":
+            if self._yanked:
                 return
             if not self._is_python_version_valid():
                 return
