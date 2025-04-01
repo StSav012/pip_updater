@@ -444,7 +444,7 @@ def update_package(
     package_data: PackageData,
     executable: str | os.PathLike[str] | None = None,
     use_pure_pip: bool = False,
-) -> int:
+) -> int | None:
     if not executable:
         executable = sys.executable
 
