@@ -1,4 +1,3 @@
-# coding=utf-8
 def main() -> None:
     from inspect import Signature, signature
     from pathlib import Path
@@ -20,7 +19,6 @@ def main() -> None:
                     f_out.write(
                         "\n".join(
                             (
-                                "# coding=utf-8",
                                 f"from pip_updater import {item}",
                                 "",
                                 "",
