@@ -656,7 +656,9 @@ def list_packages(
         package_name: str = distribution.name
         if (
             installer_file := next(
-                (f for f in distribution.files if f.name == "INSTALLER"), None
+                # `Path(str(f))` helps circumvent the mixture of separators on Windows
+                (f for f in distribution.files if Path(str(f)).name == "INSTALLER"),
+                None,
             )
         ) is None:
             print(f"Unknown installer for {package_name}", file=sys.stderr)
