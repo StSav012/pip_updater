@@ -14,7 +14,7 @@ from itertools import zip_longest
 from pathlib import Path
 from shutil import which
 from ssl import SSLCertVerificationError, SSLContext
-from subprocess import call, check_output
+from subprocess import Popen, call, check_output
 from typing import (
     Callable,
     Final,
@@ -38,6 +38,7 @@ __all__ = [
     "read_package_versions",
     "list_packages",
     "list_packages_tree",
+    "force_update_packages",
     "update_packages",
     "update_package",
     "orphaned_packages",
@@ -610,6 +611,99 @@ def update_packages() -> None:
             creationflags=DETACHED_PROCESS,
         )
         exit()
+
+
+def force_update_packages() -> None:
+    ap: argparse.ArgumentParser = argparse.ArgumentParser(
+        description="update all Python packages in an environment",
+        epilog="currently, `requirements.txt`, `pyproject.toml`, &c. are ignored",
+    )
+    ap.add_argument("--pre", action="store_true", help="include pre-release versions")
+    ap.add_argument(
+        "--pure-pip",
+        action="store_true",
+        help="use Python's pip, despite other tools might be available",
+    )
+    ap.add_argument(
+        "venv",
+        type=Path,
+        nargs="?",
+        default=Path(sys.exec_prefix),
+        help="a path to a virtual environment to perform the update in (current one by default)",
+    )
+    args: argparse.Namespace = ap.parse_intermixed_args()
+
+    executable: str | None = (
+        which(
+            "python", path=args.venv / ("Scripts" if sys.platform == "win32" else "bin")
+        )
+        or which(
+            "python",
+            path=args.venv
+            / ".venv"
+            / ("Scripts" if sys.platform == "win32" else "bin"),
+        )
+        or which(
+            "python",
+            path=args.venv / "venv" / ("Scripts" if sys.platform == "win32" else "bin"),
+        )
+        or which("python", path=args.venv)
+        or which("python", path=args.venv / ".venv")
+        or which("python", path=args.venv / "venv")
+    )
+
+    if not executable:
+        print(f"Python environment is not found at {args.venv}")
+        return
+
+    freezer: list[str] = check_output(
+        (
+            [UV_CMD, PIP, "freeze", "--python", executable]
+            if UV_CMD is not None and not args.pure_pip
+            else [executable, "-m", PIP, "freeze"]
+        ),
+        text=True,
+    ).splitlines()
+
+    packages: list[str] = []
+    for spec in freezer:
+        if "==" in spec:
+            packages.append(spec.split("==", maxsplit=1)[0])
+        elif "@" in spec and not (
+            loc := spec.split("@", maxsplit=1)[-1].lstrip()
+        ).startswith("file://"):
+            packages.append(loc)
+        else:
+            print(f"Skipping {spec}")
+
+    max_length: int = os.sysconf("SC_ARG_MAX") if hasattr(os, "sysconf") else 255
+    max_arg_length: int = 255 if sys.platform == "win32" else 131072
+
+    init_cmd: list[str] = (
+        [UV_CMD, PIP, "install", "-p", executable, "-U"]
+        if UV_CMD is not None and not args.pure_pip
+        else [executable, "-m", PIP, "install", "-U"]
+    )
+    init_cmd_length: int = len(init_cmd) + sum(map(len, init_cmd))
+
+    for package in packages.copy():
+        if len(package) > max_arg_length or init_cmd_length + len(package) > max_length:
+            print(f"{package} is too long for the command line")
+            packages.remove(package)
+
+    while packages:
+        cmd_args: list[str] = []
+        while packages and (
+            init_cmd_length + len(cmd_args) + sum(map(len, cmd_args)) + len(packages[0])
+            <= max_length
+        ):
+            cmd_args.append(packages[0])
+            packages.remove(packages[0])
+        if cmd_args:
+            Popen(args=[*init_cmd, *cmd_args]).wait()
+        else:
+            print(f"Failed to update {packages}")
+            return
 
 
 def site_paths(prefixes: Iterable[str | os.PathLike[str]] | None = None) -> list[str]:

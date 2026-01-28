@@ -28,6 +28,7 @@ dynamic = [
 
 [project.scripts]
 update-packages = 'pip_updater:update_packages'
+force-update-packages = 'pip_updater:force_update_packages'
 orphaned-packages = 'pip_updater:print_orphaned_packages'
 
 [project.urls]
